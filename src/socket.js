@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // outside the component to prevent reconnecting every render
+const socket = io('https://strangerchatbackend-production.up.railway.app/'); // outside the component to prevent reconnecting every render
 
 const SocketClient = () => {
   const [message, setMessage] = useState("");
