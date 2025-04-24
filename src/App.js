@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import './App.css';
 
 const socket = io('https://strangerchatbackend-production.up.railway.app/');
 
@@ -9,15 +10,22 @@ function App() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [message, setMessage] = useState('');
-  const [chat, setChat] = useState([]);
+  const [allMessages, setAllMessages] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     socket.on('users_online', (users) => {
-      setOnlineUsers(users.filter(u => u !== username)); // Don't show self
+      setOnlineUsers(users.filter(u => u !== username));
     });
 
-    socket.on('private_message', ({ from, message }) => {
-      setChat(prev => [...prev, { from, message }]);
+    socket.on('private_message', ({ from, to, message }) => {
+      setAllMessages(prev => [...prev, { from, to, message }]);
     });
 
     return () => {
@@ -35,15 +43,25 @@ function App() {
 
   const sendMessage = () => {
     if (selectedUser && message.trim()) {
-      socket.emit('send_private_message', { to: selectedUser, from: username, message });
-      setChat(prev => [...prev, { from: username, message }]);
+      socket.emit('send_private_message', {
+        to: selectedUser,
+        from: username,
+        message
+      });
+      setAllMessages(prev => [...prev, { from: username, to: selectedUser, message }]);
       setMessage('');
     }
   };
 
+  const filteredChat = allMessages.filter(
+    msg =>
+      (msg.from === username && msg.to === selectedUser) ||
+      (msg.from === selectedUser && msg.to === username)
+  );
+
   if (!loggedIn) {
     return (
-      <div style={{ padding: 20 }}>
+      <div className="login-container">
         <h2>Login</h2>
         <input
           placeholder="Enter username"
@@ -57,47 +75,67 @@ function App() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Hello, {username}</h2>
-
-      <div style={{ display: 'flex', gap: 20 }}>
-        <div>
+    <div className="app-container">
+      {/* Online Users Sidebar */}
+      {(!isMobile || (isMobile && !selectedUser)) && (
+        <aside className="sidebar">
+          <div>
+            <h2>Welcome, {username}</h2>
+            <button onClick={() => {
+              socket.disconnect();
+              setLoggedIn(false);
+              setSelectedUser('');
+            }}>Logout</button>
+          </div>
           <h3>Online Users</h3>
           {onlineUsers.map(user => (
             <div
               key={user}
               onClick={() => setSelectedUser(user)}
-              style={{
-                cursor: 'pointer',
-                fontWeight: selectedUser === user ? 'bold' : 'normal',
-                color: selectedUser === user ? 'blue' : 'black',
-                marginBottom: 5
-              }}
+              className={`user-item ${selectedUser === user ? 'active' : ''}`}
             >
               {user}
             </div>
           ))}
-        </div>
+        </aside>
+      )}
 
-        <div style={{ flex: 1 }}>
+      {/* Chat Area */}
+      {(!isMobile || (isMobile && selectedUser)) && (
+        <main className="chat-container">
+          {isMobile && (
+            <button
+              onClick={() => setSelectedUser('')}
+              className="back-button"
+              style={{ marginBottom: '10px' }}
+            >
+              ← Back to Users
+            </button>
+          )}
           <h3>Chat with {selectedUser || '...'}</h3>
-          <div style={{ border: '1px solid #ccc', height: 200, padding: 10, overflowY: 'scroll' }}>
-            {chat.map((msg, i) => (
-              <div key={i} style={{ textAlign: msg.from === username ? 'right' : 'left' }}>
+          <div className="chat-messages">
+            {filteredChat.map((msg, i) => (
+              <div
+                key={i}
+                className={`message ${msg.from === username ? 'sent' : 'received'}`}
+              >
                 <strong>{msg.from}:</strong> {msg.message}
               </div>
             ))}
           </div>
 
-          <input
-            placeholder="Type a message"
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && sendMessage()}
-          />
-          <button onClick={sendMessage} disabled={!selectedUser}>Send</button>
-        </div>
-      </div>
+          <div className="input-area">
+            <input
+              placeholder="Type a message"
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              disabled={!selectedUser}
+            />
+            <button onClick={sendMessage} disabled={!selectedUser}>Send</button>
+          </div>
+        </main>
+      )}
     </div>
   );
 }
